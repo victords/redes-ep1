@@ -1,6 +1,6 @@
 redes-ep1
 =========
+Pedro Scocco
+Victor Santos
 
-Servidor FTP ridiculamente básico.
-
-Meu edit
+Servidor FTP ridiculamente (Estrombolicamente) básico.
