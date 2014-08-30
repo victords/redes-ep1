@@ -28,6 +28,11 @@ int main (int argc, char **argv) {
 	/* Armazena linhas recebidas do cliente */
 	char control_line[MAXLINE + 1];
 	
+	/********************************
+	 * Variáveis de controle do FTP *
+	 ********************************/
+	int logged = 0;
+	
 	if (argc != 2) {
 		printf("Uso: %s PORTA\n", argv[0]);
 		printf("Inicia o servidor FTP na porta PORTA, modo TCP\n");
@@ -74,10 +79,29 @@ int main (int argc, char **argv) {
 			printf("[Conexão aberta]\n");
 			/* Este processo não ficará ouvindo novas conexões */
 			close(listen_conn);
-
+			
+			/* Mensagem de boas-vindas */
+			char msg[] = "Bem-vindo ao servidor FTP Ridiculamente Básico!\n";
+			write(control_conn, msg, strlen(msg));
+			
 			/* Loop da interação cliente-servidor FTP */
 			while ((n = read(control_conn, control_line, MAXLINE)) > 0) {
-				printf("Comando de tamanho %d recebido.\n", n);
+				/* Descartando os dois últimos caracteres (\r\n) */
+				control_line[n - 2] = 0;
+				
+				printf("Comando recebido: %s.\n", control_line);
+				if (logged) {
+					/* Interpretar comando aqui */
+					char msg2[] = "Seu comando será interpretado.\n";
+					write(control_conn, msg2, strlen(msg2));
+				} else if (strcmp(control_line, "USER")) {
+					char msg2[] = "O primeiro comando deve ser USER.\n";
+					write(control_conn, msg2, strlen(msg2));
+				} else {
+					char msg2[] = "Usuário logado.\n";
+					write(control_conn, msg2, strlen(msg2));
+					logged = 1;
+				}
 			}
 			
 			printf("[Conexão fechada]\n");
