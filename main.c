@@ -20,7 +20,7 @@ int main (int argc, char **argv) {
 	int listen_conn, control_conn, data_conn;
 	
 	/* Informações sobre o socket (endereço e porta) ficam nesta struct */
-	struct sockaddr_in address_info;
+	struct sockaddr_in address_info, data_address_info;
 	
 	/* Armazena tamanho da linha recebida do cliente */
 	ssize_t n;
@@ -31,7 +31,8 @@ int main (int argc, char **argv) {
 	/********************************
 	 * Variáveis de controle do FTP *
 	 ********************************/
-	int logged = 0;
+	char *msg, *cmd;
+	char logged = 0, passive = 0;
 	
 	if (argc != 2) {
 		printf("Uso: %s PORTA\n", argv[0]);
@@ -81,25 +82,53 @@ int main (int argc, char **argv) {
 			close(listen_conn);
 			
 			/* Mensagem de boas-vindas */
-			char msg[] = "Bem-vindo ao servidor FTP Ridiculamente Básico!\n";
+			msg = "220 Bem-vindo ao servidor FTP Ridiculamente Básico!\n";
 			write(control_conn, msg, strlen(msg));
+			cmd = malloc(5);
 			
 			/* Loop da interação cliente-servidor FTP */
 			while ((n = read(control_conn, control_line, MAXLINE)) > 0) {
 				/* Descartando os dois últimos caracteres (\r\n) */
 				control_line[n - 2] = 0;
+				strncpy(cmd, control_line, 4);
 				
 				printf("Comando recebido: %s.\n", control_line);
 				if (logged) {
-					/* Interpretar comando aqui */
-					char msg2[] = "Seu comando será interpretado.\n";
-					write(control_conn, msg2, strlen(msg2));
-				} else if (strcmp(control_line, "USER")) {
-					char msg2[] = "O primeiro comando deve ser USER.\n";
-					write(control_conn, msg2, strlen(msg2));
+					if (passive) {
+						msg = "200 Seu comando será interpretado.\n";
+						write(control_conn, msg, strlen(msg));
+					} else if (strcmp(cmd, "PASV")) {
+						msg = "502 Você deve entrar no modo passivo.\n";
+						write(control_conn, msg, strlen(msg));
+					} else {
+						if ((data_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+							printf("Erro ao inicializar socket!\n");
+							exit(2);
+						}
+						bzero(&data_address_info, sizeof(data_address_info));
+						data_address_info.sin_family      = AF_INET;
+						data_address_info.sin_addr.s_addr = htonl(INADDR_ANY);
+						int port = atoi(argv[1]) - 1;
+						data_address_info.sin_port        = htons(port);
+						if (bind(data_conn, (struct sockaddr *)&data_address_info, sizeof(data_address_info)) == -1) {
+							perror("Erro ao associar socket!\n");
+							exit(3);
+						}
+						if (listen(data_conn, LISTENQ) == -1) {
+							perror("Erro ao iniciar processo de listen!\n");
+							exit(4);
+						}
+						printf("Porta: %d,%d\n", port >> 16, port);
+						sprintf(msg, "227 Modo passivo. 127,0,0,1,%d,%d\n", port >> 16, port);
+						write(control_conn, msg, strlen(msg));
+						passive = 1;
+					}
+				} else if (strcmp(cmd, "USER")) {
+					msg = "530 O primeiro comando deve ser USER.\n";
+					write(control_conn, msg, strlen(msg));
 				} else {
-					char msg2[] = "Usuário logado.\n";
-					write(control_conn, msg2, strlen(msg2));
+					msg = "230 Usuário logado.\n";
+					write(control_conn, msg, strlen(msg));
 					logged = 1;
 				}
 			}
