@@ -19,7 +19,7 @@ char *read_file(const char *file_name);
 
 int main (int argc, char **argv) {
 	/* Sockets para aguardar conexões, para a conexão de controle e para a conexão de dados */	
-	int listen_conn, control_conn, data_conn;
+	int listen_conn, control_conn, data_conn, data_conn_client;
 	
 	/* Informações sobre o socket (endereço e porta) ficam nesta struct */
 	struct sockaddr_in address_info, data_address_info;
@@ -101,7 +101,17 @@ int main (int argc, char **argv) {
 						if (strcmp(cmd, "RETR") == 0) {
 							char *content = read_file(control_line + 5);
 							printf("Arquivo lido de tamanho %d\n", strlen(content));
-							write(data_conn, content, strlen(content));
+							
+							if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
+								perror("Erro ao obter conexão!\n");
+								exit(5);
+							}
+							
+							write(data_conn_client, content, strlen(content));
+							sprintf(msg, "226 Acabou.\n");
+							write(control_conn, msg, strlen(msg));
+							close(data_conn_client);
+							
 							free(content);
 						} else if (strcmp(cmd, "PASV") == 0) {
 							sprintf(msg, "227\n");
