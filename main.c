@@ -15,6 +15,8 @@
 #define MAXDATASIZE 100
 #define MAXLINE 4096
 
+char *read_file(const char *file_name);
+
 int main (int argc, char **argv) {
 	/* Sockets para aguardar conexões, para a conexão de controle e para a conexão de dados */	
 	int listen_conn, control_conn, data_conn;
@@ -82,7 +84,8 @@ int main (int argc, char **argv) {
 			close(listen_conn);
 			
 			/* Mensagem de boas-vindas */
-			msg = "220 Bem-vindo ao servidor FTP Ridiculamente Básico!\n";
+			msg = malloc(100);
+			sprintf(msg, "220 Bem-vindo ao servidor FTP Ridiculamente Básico!\n");
 			write(control_conn, msg, strlen(msg));
 			cmd = malloc(5);
 			
@@ -95,10 +98,20 @@ int main (int argc, char **argv) {
 				printf("Comando recebido: %s.\n", control_line);
 				if (logged) {
 					if (passive) {
-						msg = "200 Seu comando será interpretado.\n";
-						write(control_conn, msg, strlen(msg));
+						if (strcmp(cmd, "RETR") == 0) {
+							char *content = read_file(control_line + 5);
+							printf("Arquivo lido de tamanho %d\n", strlen(content));
+							write(data_conn, content, strlen(content));
+							free(content);
+						} else if (strcmp(cmd, "PASV") == 0) {
+							sprintf(msg, "227\n");
+							write(control_conn, msg, strlen(msg));
+						} else {
+							sprintf(msg, "502 Comando não implementado.\n");
+							write(control_conn, msg, strlen(msg));
+						}
 					} else if (strcmp(cmd, "PASV")) {
-						msg = "502 Você deve entrar no modo passivo.\n";
+						sprintf(msg, "502 Você deve entrar no modo passivo.\n");
 						write(control_conn, msg, strlen(msg));
 					} else {
 						if ((data_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -118,16 +131,17 @@ int main (int argc, char **argv) {
 							perror("Erro ao iniciar processo de listen!\n");
 							exit(4);
 						}
-						printf("Porta: %d,%d\n", port >> 16, port);
-						sprintf(msg, "227 Modo passivo. 127,0,0,1,%d,%d\n", port >> 16, port);
+						printf("Porta: %d,%d\n", port >> 8, port);
+						sprintf(msg, "227 Modo passivo. 127,0,0,1,%d,%d\n", port >> 8, port);
+						printf("msg: %s", msg);
 						write(control_conn, msg, strlen(msg));
 						passive = 1;
 					}
 				} else if (strcmp(cmd, "USER")) {
-					msg = "530 O primeiro comando deve ser USER.\n";
+					sprintf(msg, "530 O primeiro comando deve ser USER.\n");
 					write(control_conn, msg, strlen(msg));
 				} else {
-					msg = "230 Usuário logado.\n";
+					sprintf(msg, "230 Usuário logado.\n");
 					write(control_conn, msg, strlen(msg));
 					logged = 1;
 				}
@@ -141,4 +155,19 @@ int main (int argc, char **argv) {
 		close(control_conn);
 	}
 	exit(0);
+}
+
+char *read_file(const char *file_name) {
+	FILE *f = fopen(file_name, "r");
+	fseek(f, 0, SEEK_END);
+	long fsize = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	char *string = malloc(fsize + 2);
+	fread(string, fsize, 1, f);
+	fclose(f);
+
+	string[fsize] = EOF;
+	string[fsize + 1] = 0;
+	return string;
 }
