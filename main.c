@@ -59,10 +59,9 @@ int main (int argc, char **argv) {
 		exit(4);
 	}
 	
-	printf("[Servidor no ar. Aguardando conexões na porta %s]\n", argv[1]);
+	printf("[Servidor no ar. Aguardando conexões na porta %d]\n", control_port);
 	printf("[Para finalizar, pressione CTRL+C ou rode um kill ou killall]\n");
-	
-	state = LISTENING;
+
 	/* Loop principal */
 	for (;;) {
 		/* Obtendo próxima conexão */
@@ -71,36 +70,35 @@ int main (int argc, char **argv) {
 			exit(5);
 		}
 		
-		/* Obtendo IP do servidor e substituindo pontos por virgulas*/
+		/* Obtendo IP da conexão e substituindo pontos por virgulas*/
 		unsigned int *size = malloc(sizeof(unsigned int));
 		*size = sizeof(struct sockaddr_in);
 		getsockname(control_conn, (struct sockaddr *)&address_info, size);
 		ip = inet_ntoa(address_info.sin_addr);
 		int i;
-		for (i = 0; i < strlen(ip); ++i)
-			if (ip[i] == '.') ip[i] = ',';
+		for (i = 0; i < strlen(ip); ++i) if (ip[i] == '.') ip[i] = ',';
 
 		/* Gerando novo processo para atender paralelamente à conexão obtida */
 		if (fork() == 0) {
 			printf("[Conexão aberta]\n");
-			/* Este processo não ficará ouvindo novas conexões */
 			state = WAITING_USER;
+
+			/* Este processo não ficará ouvindo novas conexões */
 			close(listen_conn);
 			
 			/* Mensagem de boas-vindas */
-			msg = malloc(100);
-			sprintf(msg, "220 Bem-vindo ao servidor FTP Ridiculamente Básico!\n");
-			write(control_conn, msg, strlen(msg));
-			cmd = malloc(5);
+			write(control_conn, "220 Bem-vindo ao servidor FTP Ridiculamente Basico!\n", strlen(msg));
 			
 			/* Loop da interação cliente-servidor FTP */
 			while ((n = read(control_conn, control_line, MAX_COMMAND_LINE)) > 0) {
 				/* Descartando os dois últimos caracteres (\r\n) */
 				control_line[n - 2] = 0;
+				printf("Comando recebido: %s.\n", control_line);
+
+				/* Primeiro argumento é o comando a ser executado */
 				cmd = strtok(control_line, " ");
 				
-				printf("Comando recebido: %s.\n", control_line);
-				
+				/* Seleciona a função que cuida do comando recebido */
 				if      (strcmp(cmd, "USER") == 0) command_user();
 				else if (strcmp(cmd, "PASS") == 0) command_pass();
 				else if (strcmp(cmd, "PASV") == 0) command_pasv();
@@ -108,44 +106,9 @@ int main (int argc, char **argv) {
 				else if (strcmp(cmd, "STOR") == 0) command_stor();
 				else if (strcmp(cmd, "QUIT") == 0) command_quit();
 				else                               command_not_implemented();
-								
-/*				if (logged) {*/
-/*					if (passive) {*/
-/*						if (strcmp(cmd, "RETR") == 0) {*/
-/*							char *content = read_file(control_line + 5);*/
-/*							printf("Arquivo lido de tamanho %d\n", strlen(content));*/
-/*							*/
-/*							if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {*/
-/*								perror("Erro ao obter conexão!\n");*/
-/*								exit(5);*/
-/*							}*/
-/*							*/
-/*							write(data_conn_client, content, strlen(content));*/
-/*							sprintf(msg, "226 Acabou.\n");*/
-/*							write(control_conn, msg, strlen(msg));*/
-/*							close(data_conn_client);*/
-/*							*/
-/*							free(content);*/
-/*						} else if (strcmp(cmd, "PASV") == 0) {*/
-/*							sprintf(msg, "227\n");*/
-/*							write(control_conn, msg, strlen(msg));*/
-/*						} else {*/
-/*							sprintf(msg, "502 Comando não implementado.\n");*/
-/*							write(control_conn, msg, strlen(msg));*/
-/*						}*/
-/*					} else if (strcmp(cmd, "PASV")) {*/
-/*						sprintf(msg, "502 Você deve entrar no modo passivo.\n");*/
-/*						write(control_conn, msg, strlen(msg));*/
-/*					} else {*/
-						
-/*					}*/
-/*				} else if (strcmp(cmd, "USER")) {*/
-/*					sprintf(msg, "530 O primeiro comando deve ser USER.\n");*/
-/*					write(control_conn, msg, strlen(msg));*/
-/*				} else {*/
-/*				}*/
 			}
-			
+
+			/* Fechar sockets ao recebe EOF */
 			command_quit();
 		}
 		
@@ -202,6 +165,23 @@ void command_port() {
 }
 
 void command_retr() {
+	char *arg = strtok(NULL, " ");
+
+	char *content = read_file(arg);
+	printf("Arquivo lido de tamanho %d\n", strlen(content));
+
+  /* CHECAR ISSO AQUI PQ ACHO Q A CONEXÃO É LOGO DEPOIS DE RECEBER O PASV */
+	if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
+		perror("Erro ao obter conexão!\n");
+		exit(5);
+	}
+
+	write(data_conn_client, content, strlen(content));
+	sprintf(msg, "226 Acabou.\n");
+	write(control_conn, msg, strlen(msg));
+	close(data_conn_client);
+
+	free(content);
 }
 
 void command_stor() {
@@ -235,4 +215,3 @@ char *read_file(const char *file_name) {
 	string[fsize + 1] = 0;
 	return string;
 }
-
