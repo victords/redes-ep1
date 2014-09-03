@@ -20,11 +20,6 @@ int main (int argc, char **argv) {
 	/* Armazena linhas recebidas do cliente */
 	char control_line[MAX_COMMAND_LINE + 1];
 	
-	/********************************
-	 * Variáveis de controle do FTP *
-	 ********************************/
-	char *msg, *cmd;
-	
 	if (argc != 2) {
 		printf("Uso: %s PORTA\n", argv[0]);
 		printf("Inicia o servidor FTP na porta PORTA, modo TCP\n");
@@ -96,15 +91,15 @@ int main (int argc, char **argv) {
 				printf("Comando recebido: %s.\n", control_line);
 
 				/* Primeiro argumento é o comando a ser executado */
-				cmd = strtok(control_line, " ");
+				char *cmd = strtok(control_line, " ");
 				
 				/* Seleciona a função que cuida do comando recebido */
-				if      (strcmp(cmd, "USER") == 0) command_user();
-				else if (strcmp(cmd, "PASS") == 0) command_pass();
-				else if (strcmp(cmd, "PASV") == 0) command_pasv();
-				else if (strcmp(cmd, "RETR") == 0) command_retr();
-				else if (strcmp(cmd, "STOR") == 0) command_stor();
-				else if (strcmp(cmd, "QUIT") == 0) command_quit();
+				if      (strcasecmp(cmd, "USER") == 0) command_user();
+				else if (strcasecmp(cmd, "PASS") == 0) command_pass();
+				else if (strcasecmp(cmd, "PASV") == 0) command_pasv();
+				else if (strcasecmp(cmd, "RETR") == 0) command_retr();
+				else if (strcasecmp(cmd, "STOR") == 0) command_stor();
+				else if (strcasecmp(cmd, "QUIT") == 0) command_quit();
 				else                               command_not_implemented();
 			}
 
@@ -129,6 +124,10 @@ void command_pass() {
 	char *msg = "230 Usuario logado.\n";
 	write(control_conn, msg, strlen(msg));
 	state = ACTIVE;
+}
+
+void command_type() {
+
 }
 
 void command_pasv() {
