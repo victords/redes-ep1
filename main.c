@@ -82,7 +82,8 @@ int main (int argc, char **argv) {
 			close(listen_conn);
 			
 			/* Mensagem de boas-vindas */
-			write(control_conn, "220 Bem-vindo ao servidor FTP Ridiculamente Basico!\n", strlen(msg));
+			char *msg = "220 Bem-vindo ao servidor FTP Ridiculamente Basico!\n";
+			write(control_conn, msg, strlen(msg));
 			
 			/* Loop da interação cliente-servidor FTP */
 			while ((n = read(control_conn, control_line, MAX_COMMAND_LINE)) > 0) {
@@ -131,6 +132,13 @@ void command_type() {
 }
 
 void command_pasv() {
+	char *msg;
+	if (state == PASSIVE) {
+		msg = "200 OK\n";
+		write(control_conn, msg, strlen(msg));
+		return;
+	}
+
 	if ((data_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
 		printf("Erro ao inicializar socket!\n");
 		exit(2);
@@ -148,9 +156,8 @@ void command_pasv() {
 		perror("Erro ao iniciar processo de listen!\n");
 		exit(4);
 	}
-	char *msg = malloc(50);
+	msg = malloc(50);
 	sprintf(msg, "227 Modo passivo. %s,%hhu,%hhu\n", ip, data_port >> 8, data_port);
-	printf("msg: %s", msg);
 	write(control_conn, msg, strlen(msg));
 	free(msg);
 	state = PASSIVE;
@@ -209,11 +216,10 @@ char *read_file(const char *file_name) {
 	long fsize = ftell(f);
 	fseek(f, 0, SEEK_SET);
 
-	char *string = malloc(fsize + 2);
-	fread(string, fsize, 1, f);
+	char *string = malloc(fsize + 1);
+	fread(string, 1, fsize, f);
 	fclose(f);
 
-	string[fsize] = EOF;
-	string[fsize + 1] = 0;
+	string[fsize] = 0;
 	return string;
 }
