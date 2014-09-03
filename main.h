@@ -17,6 +17,7 @@ char *read_file(const char *file_name);
 
 void command_user();
 void command_pass();
+void command_type();
 void command_pasv();
 void command_retr();
 void command_stor();
