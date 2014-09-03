@@ -158,10 +158,13 @@ void command_pasv() {
 }
 
 void command_port() {
-	if (state < ACTIVE)
-	char *msg = "230 Usuario logado.\n";
+	char *msg;
+	if (state < ACTIVE) msg = "530 Usuario nao logado.\n";
+	else {
+		msg = "200 OK\n";
+		state = ACTIVE;
+	}
 	write(control_conn, msg, strlen(msg));
-	state = ACTIVE;
 }
 
 void command_retr() {
@@ -170,14 +173,14 @@ void command_retr() {
 	char *content = read_file(arg);
 	printf("Arquivo lido de tamanho %d\n", strlen(content));
 
-  /* CHECAR ISSO AQUI PQ ACHO Q A CONEXÃO É LOGO DEPOIS DE RECEBER O PASV */
+	/* CHECAR ISSO AQUI PQ ACHO Q A CONEXÃO É LOGO DEPOIS DE RECEBER O PASV */
 	if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
 		perror("Erro ao obter conexão!\n");
 		exit(5);
 	}
 
 	write(data_conn_client, content, strlen(content));
-	sprintf(msg, "226 Acabou.\n");
+	char *msg = "226 Acabou.\n";
 	write(control_conn, msg, strlen(msg));
 	close(data_conn_client);
 
