@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <errno.h>
 #include <string.h>
 #include <netdb.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -13,7 +15,7 @@
 #define LISTEN_QUEUE_SIZE 1
 #define MAX_COMMAND_LINE 1024
 
-char *read_file(const char *file_name);
+char *read_file(const char *file_name, int *size);
 
 void command_user();
 void command_pass();

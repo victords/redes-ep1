@@ -97,6 +97,7 @@ int main (int argc, char **argv) {
 				/* Seleciona a função que cuida do comando recebido */
 				if      (strcasecmp(cmd, "USER") == 0) command_user();
 				else if (strcasecmp(cmd, "PASS") == 0) command_pass();
+				else if (strcasecmp(cmd, "TYPE") == 0) command_type();
 				else if (strcasecmp(cmd, "PASV") == 0) command_pasv();
 				else if (strcasecmp(cmd, "RETR") == 0) command_retr();
 				else if (strcasecmp(cmd, "STOR") == 0) command_stor();
@@ -128,7 +129,16 @@ void command_pass() {
 }
 
 void command_type() {
+	char *arg = strtok(NULL, " ");
+	arg[0] = tolower(arg[0]);
 
+	char *msg;
+	if (arg[0] == 'i') {
+		msg = "200 OK\n";
+	} else {
+		msg = "504 Command not implemented for that parameter.\n";
+	}
+	write(control_conn, msg, strlen(msg));
 }
 
 void command_pasv() {
@@ -165,6 +175,7 @@ void command_pasv() {
 
 void command_port() {
 	char *msg;
+	
 	if (state < ACTIVE) msg = "530 Usuario nao logado.\n";
 	else {
 		msg = "200 OK\n";
@@ -175,20 +186,32 @@ void command_port() {
 
 void command_retr() {
 	char *arg = strtok(NULL, " ");
+	char *msg;
 
-	char *content = read_file(arg);
-	printf("Arquivo lido de tamanho %d\n", strlen(content));
+	int size;
+	char *content = read_file(arg, &size);
+	if (content == NULL) {
+		printf("Arquivo nao encontrado\n");
+		msg = "550 File not Found.\n";
+		write(control_conn, msg, strlen(msg));
+		return;
+	} else {
+		printf("Arquivo lido de tamanho %d\n", size);
+		msg = "150 File status okay; about to open data connection.\n";
+		write(control_conn, msg, strlen(msg));
+	}
 
-	/* CHECAR ISSO AQUI PQ ACHO Q A CONEXÃO É LOGO DEPOIS DE RECEBER O PASV */
 	if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
 		perror("Erro ao obter conexão!\n");
 		exit(5);
 	}
 
-	write(data_conn_client, content, strlen(content));
-	char *msg = "226 Acabou.\n";
-	write(control_conn, msg, strlen(msg));
+	write(data_conn_client, content, size);
+
 	close(data_conn_client);
+
+	msg = "226 Acabou.\n";
+	write(control_conn, msg, strlen(msg));
 
 	free(content);
 }
@@ -210,16 +233,18 @@ void command_not_implemented() {
 	write(control_conn, msg, strlen(msg));
 }
 
-char *read_file(const char *file_name) {
-	FILE *f = fopen(file_name, "r");
-	fseek(f, 0, SEEK_END);
-	long fsize = ftell(f);
-	fseek(f, 0, SEEK_SET);
+char *read_file(const char *file_name, int *size) {
+	FILE *f = fopen(file_name, "rb");
+	if (f == NULL)
+	    return NULL;
 
-	char *string = malloc(fsize + 1);
-	fread(string, 1, fsize, f);
+	fseek(f, 0L, SEEK_END);
+	*size = ftell(f);
+	fseek(f, 0L, SEEK_SET);
+	
+	char *string = malloc(*size);
+	fread(string, 1, *size, f);
 	fclose(f);
 
-	string[fsize] = 0;
 	return string;
 }
