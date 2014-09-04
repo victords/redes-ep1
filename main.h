@@ -15,8 +15,6 @@
 #define LISTEN_QUEUE_SIZE 1
 #define MAX_COMMAND_LINE 1024
 
-char *read_file(const char *file_name, int *size);
-
 void command_user();
 void command_pass();
 void command_type();
@@ -31,6 +29,11 @@ typedef enum {
 	WAITING_USER,
 	WAITING_PASSWORD,
 	ACTIVE,
-	PASSIVE
+	PASSIVE,
+	TRANSFERRING
 } State;
 
+typedef enum {
+	IMAGE,
+	OTHERS,
+} Type;

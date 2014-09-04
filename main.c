@@ -3,11 +3,14 @@
 /* Controle do estado da sessão do usuário */
 State state = LISTENING;
 
+/* Controle do tipo de transmissão. Tipo inicial ASCII, que não é suportado */
+Type type = OTHERS;
+
 /* Sockets para aguardar conexões, para a conexão de controle e para a conexão de dados */	
 int listen_conn, control_conn, data_conn, data_conn_client;
 
 /* Endereço do servidor */
-int control_port, data_port;
+short control_port, data_port;
 char* ip;
 
 /* Informações sobre o socket (endereço e porta) ficam nesta struct */
@@ -28,7 +31,6 @@ int main (int argc, char **argv) {
 	
 	/* Portas do servidor */
 	control_port = atoi(argv[1]);
-	data_port = control_port - 1;
 	
 	/* Criação do socket que aguarda conexões */
 	if ((listen_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
@@ -66,9 +68,8 @@ int main (int argc, char **argv) {
 		}
 		
 		/* Obtendo IP da conexão e substituindo pontos por virgulas*/
-		unsigned int *size = malloc(sizeof(unsigned int));
-		*size = sizeof(struct sockaddr_in);
-		getsockname(control_conn, (struct sockaddr *)&address_info, size);
+		unsigned int size = sizeof(struct sockaddr_in);
+		getsockname(control_conn, (struct sockaddr *)&address_info, &size);
 		ip = inet_ntoa(address_info.sin_addr);
 		int i;
 		for (i = 0; i < strlen(ip); ++i) if (ip[i] == '.') ip[i] = ',';
@@ -102,7 +103,7 @@ int main (int argc, char **argv) {
 				else if (strcasecmp(cmd, "RETR") == 0) command_retr();
 				else if (strcasecmp(cmd, "STOR") == 0) command_stor();
 				else if (strcasecmp(cmd, "QUIT") == 0) command_quit();
-				else                               command_not_implemented();
+				else                                   command_not_implemented();
 			}
 
 			/* Fechar sockets ao recebe EOF */
@@ -132,22 +133,17 @@ void command_type() {
 	char *arg = strtok(NULL, " ");
 	arg[0] = tolower(arg[0]);
 
-	char *msg;
-	if (arg[0] == 'i') {
-		msg = "200 OK\n";
-	} else {
-		msg = "504 Command not implemented for that parameter.\n";
-	}
+	if (arg[0] == 'i') 
+		type = IMAGE;
+	else 
+		type = OTHERS;
+	
+	char *msg = "200 OK\n";
 	write(control_conn, msg, strlen(msg));
 }
 
 void command_pasv() {
 	char *msg;
-	if (state == PASSIVE) {
-		msg = "200 OK\n";
-		write(control_conn, msg, strlen(msg));
-		return;
-	}
 
 	if ((data_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
 		printf("Erro ao inicializar socket!\n");
@@ -157,7 +153,8 @@ void command_pasv() {
 	bzero(&data_address_info, sizeof(data_address_info));
 	data_address_info.sin_family      = AF_INET;
 	data_address_info.sin_addr.s_addr = address_info.sin_addr.s_addr;
-	data_address_info.sin_port        = htons(data_port);
+	data_address_info.sin_port        = htons(0);
+
 	if (bind(data_conn, (struct sockaddr *)&data_address_info, sizeof(data_address_info)) == -1) {
 		perror("Erro ao associar socket!\n");
 		exit(3);
@@ -166,8 +163,14 @@ void command_pasv() {
 		perror("Erro ao iniciar processo de listen!\n");
 		exit(4);
 	}
+	
+	/* Obtendo Porta da conexão de dados*/
+	unsigned int size = sizeof(struct sockaddr_in);
+	getsockname(data_conn, (struct sockaddr *)&data_address_info, &size);
+	data_port = ntohs(data_address_info.sin_port);
+
 	msg = malloc(50);
-	sprintf(msg, "227 Modo passivo. %s,%hhu,%hhu\n", ip, data_port >> 8, data_port);
+	sprintf(msg, "227 Modo passivo. %s,%hu,%hu\n", ip, data_port >> 8, data_port & 0xFF);
 	write(control_conn, msg, strlen(msg));
 	free(msg);
 	state = PASSIVE;
@@ -185,38 +188,98 @@ void command_port() {
 }
 
 void command_retr() {
-	char *arg = strtok(NULL, " ");
 	char *msg;
 
-	int size;
-	char *content = read_file(arg, &size);
-	if (content == NULL) {
+	if (type == OTHERS) {
+		msg = "451 Types other than Image not supported.\n";
+		write(control_conn, msg, strlen(msg));
+		return;
+	}
+
+	char *file_name = strtok(NULL, " ");
+	int i;
+
+	FILE *file = fopen(file_name, "rb");
+
+	if (file == NULL) {
 		printf("Arquivo nao encontrado\n");
 		msg = "550 File not Found.\n";
 		write(control_conn, msg, strlen(msg));
 		return;
 	} else {
-		printf("Arquivo lido de tamanho %d\n", size);
+		printf("Arquivo encontrado\n");
 		msg = "150 File status okay; about to open data connection.\n";
 		write(control_conn, msg, strlen(msg));
 	}
 
-	if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
-		perror("Erro ao obter conexão!\n");
-		exit(5);
+	if (fork() == 0) {
+		if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
+			perror("Erro ao obter conexão!\n");
+			exit(5);
+		}
+
+		fseek(file, 0L, SEEK_END);
+		int size = ftell(file);
+		fseek(file, 0L, SEEK_SET);
+
+		char byte;
+		for (i = 0; i < size; ++i) {
+			fread(&byte, 1, 1, file);
+			write(data_conn_client, &byte, 1);
+		}
+
+		close(data_conn_client);
+		fclose(file);
+
+		msg = "226 Acabou.\n";
+		write(control_conn, msg, strlen(msg));
+		exit(0);
 	}
-
-	write(data_conn_client, content, size);
-
-	close(data_conn_client);
-
-	msg = "226 Acabou.\n";
-	write(control_conn, msg, strlen(msg));
-
-	free(content);
 }
 
 void command_stor() {
+	char *msg;
+
+	if (type == OTHERS) {
+		msg = "451 Types other than Image not supported.\n";
+		write(control_conn, msg, strlen(msg));
+		return;
+	}
+
+	char *file_name = strtok(NULL, " ");
+	int n;
+
+	FILE *file = fopen(file_name, "wb");
+
+	if (file == NULL) {
+		printf("Arquivo nao foi aberto com sucesso\n");
+		msg = "451 File failed to be created.\n";
+		write(control_conn, msg, strlen(msg));
+		return;
+	} else {
+		printf("Arquivo criado\n");
+		msg = "150 File status okay; about to open data connection.\n";
+		write(control_conn, msg, strlen(msg));
+	}
+
+	if (fork() == 0) {
+		if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
+			perror("Erro ao obter conexão!\n");
+			exit(5);
+		}
+
+		char byte;
+		while ((n = read(data_conn_client, &byte, 1)) > 0) {
+			fwrite(&byte, 1, 1, file);
+		}
+
+		close(data_conn_client);
+		fclose(file);
+
+		msg = "226 Acabou.\n";
+		write(control_conn, msg, strlen(msg));
+		exit(0);
+	}
 }
 
 void command_quit() {
@@ -231,20 +294,4 @@ void command_quit() {
 void command_not_implemented() {
 	char *msg = "502 Comando nao implementado.\n";
 	write(control_conn, msg, strlen(msg));
-}
-
-char *read_file(const char *file_name, int *size) {
-	FILE *f = fopen(file_name, "rb");
-	if (f == NULL)
-	    return NULL;
-
-	fseek(f, 0L, SEEK_END);
-	*size = ftell(f);
-	fseek(f, 0L, SEEK_SET);
-	
-	char *string = malloc(*size);
-	fread(string, 1, *size, f);
-	fclose(f);
-
-	return string;
 }
