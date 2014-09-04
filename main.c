@@ -24,8 +24,8 @@ int main (int argc, char **argv) {
 	char control_line[MAX_COMMAND_LINE + 1];
 	
 	if (argc != 2) {
-		printf("Uso: %s PORTA\n", argv[0]);
-		printf("Inicia o servidor FTP na porta PORTA, modo TCP\n");
+		printf("Usage: %s <PORT>\n", argv[0]);
+		printf("Starts the FTP server on port <PORT>.\n");
 		exit(1);
 	}
 	
@@ -34,7 +34,7 @@ int main (int argc, char **argv) {
 	
 	/* Criação do socket que aguarda conexões */
 	if ((listen_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		printf("Erro ao inicializar socket!\n");
+		printf("Error on socket (listen connection)!\n");
 		exit(2);
 	}
 	
@@ -46,24 +46,27 @@ int main (int argc, char **argv) {
 	
 	/* Associando socket ao endereço e porta especificados pela estrutura */
 	if (bind(listen_conn, (struct sockaddr *)&address_info, sizeof(address_info)) == -1) {
-		perror("Erro ao associar socket!\n");
+		perror("Error on bind (listen connection)!\n");
 		exit(3);
 	}
 	
 	/* Coloca o socket para "escutar" */
 	if (listen(listen_conn, LISTEN_QUEUE_SIZE) == -1) {
-		perror("Erro ao iniciar processo de listen!\n");
+		perror("Error on listen (Control Connection)!\n");
 		exit(4);
 	}
+
+	printf("=================================\n");
+	printf("= Ridiculously Basic FTP Server =\n");
+	printf("=================================\n\n");
 	
-	printf("[Servidor no ar. Aguardando conexões na porta %d]\n", control_port);
-	printf("[Para finalizar, pressione CTRL+C ou rode um kill ou killall]\n");
+	printf("Welcome! Listening for connections on port %d\n", control_port);
 
 	/* Loop principal */
 	for (;;) {
 		/* Obtendo próxima conexão */
 		if ((control_conn = accept(listen_conn, NULL, NULL)) == -1) {
-			perror("Erro ao obter conexão!\n");
+			perror("Error on accept (Control Connection)!\n");
 			exit(5);
 		}
 		
@@ -76,21 +79,21 @@ int main (int argc, char **argv) {
 
 		/* Gerando novo processo para atender paralelamente à conexão obtida */
 		if (fork() == 0) {
-			printf("[Conexão aberta]\n");
+			printf("[Connection open]\n");
 			state = WAITING_USER;
 
 			/* Este processo não ficará ouvindo novas conexões */
 			close(listen_conn);
 			
 			/* Mensagem de boas-vindas */
-			char *msg = "220 Bem-vindo ao servidor FTP Ridiculamente Basico!\n";
+			char *msg = "220 Welcome to the ridiculously basic FTP server!\n";
 			write(control_conn, msg, strlen(msg));
 			
 			/* Loop da interação cliente-servidor FTP */
 			while ((n = read(control_conn, control_line, MAX_COMMAND_LINE)) > 0) {
 				/* Descartando os dois últimos caracteres (\r\n) */
 				control_line[n - 2] = 0;
-				printf("Comando recebido: %s.\n", control_line);
+				printf("Command required: %s.\n", control_line);
 
 				/* Primeiro argumento é o comando a ser executado */
 				char *cmd = strtok(control_line, " ");
@@ -118,13 +121,13 @@ int main (int argc, char **argv) {
 }
 
 void command_user() {
-	char *msg = "331 Usuario aceito. Senha requerida.\n";
+	char *msg = "331 User accepted. Password requerida.\n";
 	write(control_conn, msg, strlen(msg));
 	state = WAITING_PASSWORD;
 }
 
 void command_pass() {
-	char *msg = "230 Usuario logado.\n";
+	char *msg = "230 User logged in.\n";
 	write(control_conn, msg, strlen(msg));
 	state = ACTIVE;
 }
@@ -143,10 +146,17 @@ void command_type() {
 }
 
 void command_pasv() {
-	char *msg;
+	char *msg = malloc(50);
+
+	if (state == PASSIVE) {
+		sprintf(msg, "227 Passive mode. %s,%hu,%hu\n", ip, data_port >> 8, data_port & 0xFF);
+		write(control_conn, msg, strlen(msg));
+		free(msg);
+		return;
+	}
 
 	if ((data_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		printf("Erro ao inicializar socket!\n");
+		printf("Error on socket (data connection)!\n");
 		exit(2);
 	}
 	struct sockaddr_in data_address_info;
@@ -156,11 +166,11 @@ void command_pasv() {
 	data_address_info.sin_port        = htons(0);
 
 	if (bind(data_conn, (struct sockaddr *)&data_address_info, sizeof(data_address_info)) == -1) {
-		perror("Erro ao associar socket!\n");
+		perror("Error on bind (data connection)!\n");
 		exit(3);
 	}
 	if (listen(data_conn, LISTEN_QUEUE_SIZE) == -1) {
-		perror("Erro ao iniciar processo de listen!\n");
+		perror("Error on listen (data connection)!\n");
 		exit(4);
 	}
 	
@@ -169,8 +179,7 @@ void command_pasv() {
 	getsockname(data_conn, (struct sockaddr *)&data_address_info, &size);
 	data_port = ntohs(data_address_info.sin_port);
 
-	msg = malloc(50);
-	sprintf(msg, "227 Modo passivo. %s,%hu,%hu\n", ip, data_port >> 8, data_port & 0xFF);
+	sprintf(msg, "227 Passive mode. %s,%hu,%hu\n", ip, data_port >> 8, data_port & 0xFF);
 	write(control_conn, msg, strlen(msg));
 	free(msg);
 	state = PASSIVE;
@@ -179,10 +188,12 @@ void command_pasv() {
 void command_port() {
 	char *msg;
 	
-	if (state < ACTIVE) msg = "530 Usuario nao logado.\n";
+	if (state < ACTIVE) msg = "530 User not logged in.\n";
 	else {
 		msg = "200 OK\n";
 		state = ACTIVE;
+		if (state == PASSIVE)
+			close(data_conn);
 	}
 	write(control_conn, msg, strlen(msg));
 }
@@ -202,19 +213,19 @@ void command_retr() {
 	FILE *file = fopen(file_name, "rb");
 
 	if (file == NULL) {
-		printf("Arquivo nao encontrado\n");
+		printf("File not found\n");
 		msg = "550 File not Found.\n";
 		write(control_conn, msg, strlen(msg));
 		return;
 	} else {
-		printf("Arquivo encontrado\n");
-		msg = "150 File status okay; about to open data connection.\n";
+		printf("File opened\n");
+		msg = "150 File okay; opening data connection.\n";
 		write(control_conn, msg, strlen(msg));
 	}
 
 	if (fork() == 0) {
 		if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
-			perror("Erro ao obter conexão!\n");
+			perror("Error on accept (data connection)!\n");
 			exit(5);
 		}
 
@@ -231,7 +242,7 @@ void command_retr() {
 		close(data_conn_client);
 		fclose(file);
 
-		msg = "226 Acabou.\n";
+		msg = "226 Transfer completed!.\n";
 		write(control_conn, msg, strlen(msg));
 		exit(0);
 	}
@@ -252,19 +263,19 @@ void command_stor() {
 	FILE *file = fopen(file_name, "wb");
 
 	if (file == NULL) {
-		printf("Arquivo nao foi aberto com sucesso\n");
+		printf("File failed to be created.\n");
 		msg = "451 File failed to be created.\n";
 		write(control_conn, msg, strlen(msg));
 		return;
 	} else {
-		printf("Arquivo criado\n");
-		msg = "150 File status okay; about to open data connection.\n";
+		printf("File created.\n");
+		msg = "150 File okay; opening data connection.\n";
 		write(control_conn, msg, strlen(msg));
 	}
 
 	if (fork() == 0) {
 		if ((data_conn_client = accept(data_conn, NULL, NULL)) == -1) {
-			perror("Erro ao obter conexão!\n");
+			perror("Error on accept (data connection)!\n");
 			exit(5);
 		}
 
@@ -276,22 +287,25 @@ void command_stor() {
 		close(data_conn_client);
 		fclose(file);
 
-		msg = "226 Acabou.\n";
+		msg = "226 Transfer completed.\n";
 		write(control_conn, msg, strlen(msg));
 		exit(0);
 	}
 }
 
 void command_quit() {
-	char *msg = "221 Ateh mais!\n";
+	char *msg = "221 See ya!\n";
 	write(control_conn, msg, strlen(msg));
 	
 	close(control_conn);
-	printf("[Conexao fechada]\n");
+	if (state == PASSIVE)
+		close(data_conn);
+
+	printf("[Connection closed]\n");
 	exit(0);
 }
 
 void command_not_implemented() {
-	char *msg = "502 Comando nao implementado.\n";
+	char *msg = "502 Command not implemented.\n";
 	write(control_conn, msg, strlen(msg));
 }
