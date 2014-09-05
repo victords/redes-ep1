@@ -93,7 +93,7 @@ int main (int argc, char **argv) {
 			while ((n = read(control_conn, control_line, MAX_COMMAND_LINE)) > 0) {
 				/* Descartando os dois últimos caracteres (\r\n) */
 				control_line[n - 2] = 0;
-				printf("Command required: %s.\n", control_line);
+				printf("Command received: %s.\n", control_line);
 
 				/* Primeiro argumento é o comando a ser executado */
 				char *cmd = strtok(control_line, " ");
@@ -121,7 +121,7 @@ int main (int argc, char **argv) {
 }
 
 void command_user() {
-	char *msg = "331 User accepted. Password requerida.\n";
+	char *msg = "331 User accepted. Password required.\n";
 	write(control_conn, msg, strlen(msg));
 	state = WAITING_PASSWORD;
 }
@@ -146,14 +146,7 @@ void command_type() {
 }
 
 void command_pasv() {
-	char *msg = malloc(50);
-
-	if (state == PASSIVE) {
-		sprintf(msg, "227 Passive mode. %s,%hu,%hu\n", ip, data_port >> 8, data_port & 0xFF);
-		write(control_conn, msg, strlen(msg));
-		free(msg);
-		return;
-	}
+	if (state == PASSIVE) close(data_conn);
 
 	if ((data_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
 		printf("Error on socket (data connection)!\n");
@@ -178,8 +171,11 @@ void command_pasv() {
 	unsigned int size = sizeof(struct sockaddr_in);
 	getsockname(data_conn, (struct sockaddr *)&data_address_info, &size);
 	data_port = ntohs(data_address_info.sin_port);
-
-	sprintf(msg, "227 Passive mode. %s,%hu,%hu\n", ip, data_port >> 8, data_port & 0xFF);
+	
+	char *msg = malloc(50);
+	sprintf(msg, "227 Passive mode. %s,%hhu,%hhu\n", ip,
+		(unsigned char)(data_port >> 8),
+		(unsigned char)(data_port & 0xFF));
 	write(control_conn, msg, strlen(msg));
 	free(msg);
 	state = PASSIVE;
@@ -208,6 +204,7 @@ void command_retr() {
 	}
 
 	char *file_name = strtok(NULL, " ");
+	printf("File: %s\n", file_name);
 	int i;
 
 	FILE *file = fopen(file_name, "rb");
