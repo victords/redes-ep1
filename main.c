@@ -34,7 +34,7 @@ int main (int argc, char **argv) {
 	
 	/* Criação do socket que aguarda conexões */
 	if ((listen_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		printf("Error on socket (listen connection)!\n");
+		perror("Error on socket (listen connection)!\n");
 		exit(2);
 	}
 	
@@ -103,6 +103,7 @@ int main (int argc, char **argv) {
 				else if (strcasecmp(cmd, "PASS") == 0) command_pass();
 				else if (strcasecmp(cmd, "TYPE") == 0) command_type();
 				else if (strcasecmp(cmd, "PASV") == 0) command_pasv();
+				else if (strcasecmp(cmd, "PORT") == 0) command_port();
 				else if (strcasecmp(cmd, "RETR") == 0) command_retr();
 				else if (strcasecmp(cmd, "STOR") == 0) command_stor();
 				else if (strcasecmp(cmd, "QUIT") == 0) command_quit();
@@ -133,6 +134,8 @@ void command_pass() {
 }
 
 void command_type() {
+	if (not_logged()) return;
+	
 	char *arg = strtok(NULL, " ");
 	arg[0] = tolower(arg[0]);
 
@@ -146,10 +149,12 @@ void command_type() {
 }
 
 void command_pasv() {
+	if (not_logged()) return;
+	
 	if (state == PASSIVE) close(data_conn);
 
 	if ((data_conn = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		printf("Error on socket (data connection)!\n");
+		perror("Error on socket (data connection)!\n");
 		exit(2);
 	}
 	struct sockaddr_in data_address_info;
@@ -182,40 +187,40 @@ void command_pasv() {
 }
 
 void command_port() {
-	char *msg;
+	if (not_logged()) return;
 	
-	if (state < ACTIVE) msg = "530 User not logged in.\n";
-	else {
-		msg = "200 OK\n";
-		state = ACTIVE;
-		if (state == PASSIVE)
-			close(data_conn);
-	}
+	state = ACTIVE;
+	if (state == PASSIVE)
+		close(data_conn);
+	char *msg = "200 OK\n";
 	write(control_conn, msg, strlen(msg));
 }
 
 void command_retr() {
-	char *msg;
+	if (not_logged()) return;
 
+	char *msg;
 	if (type == OTHERS) {
 		msg = "451 Types other than Image not supported.\n";
 		write(control_conn, msg, strlen(msg));
 		return;
 	}
+	if (state != PASSIVE) {
+		msg = "425 Only passive mode supported.\n";
+		write(control_conn, msg, strlen(msg));
+		return;
+	}
 
 	char *file_name = strtok(NULL, " ");
-	printf("File: %s\n", file_name);
 	int i;
 
 	FILE *file = fopen(file_name, "rb");
 
 	if (file == NULL) {
-		printf("File not found\n");
 		msg = "550 File not Found.\n";
 		write(control_conn, msg, strlen(msg));
 		return;
 	} else {
-		printf("File opened\n");
 		msg = "150 File okay; opening data connection.\n";
 		write(control_conn, msg, strlen(msg));
 	}
@@ -246,10 +251,16 @@ void command_retr() {
 }
 
 void command_stor() {
+	if (not_logged()) return;
+	
 	char *msg;
-
 	if (type == OTHERS) {
 		msg = "451 Types other than Image not supported.\n";
+		write(control_conn, msg, strlen(msg));
+		return;
+	}
+	if (state != PASSIVE) {
+		msg = "425 Only passive mode supported.\n";
 		write(control_conn, msg, strlen(msg));
 		return;
 	}
@@ -260,12 +271,10 @@ void command_stor() {
 	FILE *file = fopen(file_name, "wb");
 
 	if (file == NULL) {
-		printf("File failed to be created.\n");
 		msg = "451 File failed to be created.\n";
 		write(control_conn, msg, strlen(msg));
 		return;
 	} else {
-		printf("File created.\n");
 		msg = "150 File okay; opening data connection.\n";
 		write(control_conn, msg, strlen(msg));
 	}
@@ -305,4 +314,13 @@ void command_quit() {
 void command_not_implemented() {
 	char *msg = "502 Command not implemented.\n";
 	write(control_conn, msg, strlen(msg));
+}
+
+char not_logged() {
+	if (state < ACTIVE) {
+		char *msg = "530 User not logged in.\n";
+		write(control_conn, msg, strlen(msg));
+		return 1;
+	}
+	return 0;
 }

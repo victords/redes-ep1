@@ -1,0 +1,79 @@
+####################################################
+# MAC0448 - Programação para Redes de Computadores #
+# EP1 - Servidor FTP                    07/09/2014 #
+# Pedro Alves de Medeiros Scocco    nº USP         #
+# Victor David Santos               nº USP 7152628 #
+####################################################
+
+1) Observações gerais
+
+O trabalho apresentado é uma implementação incompleta de servidor FTP, visando
+apenas atender às funcionalidades explicitamente descritas no enunciado - não
+chega nem mesmo a ser uma "implementação mínima", pois não implementa todos os
+comandos descritos na RFC 959 como obrigatórios para que uma implementação seja
+considerada como tal.
+
+Os comandos suportados são:
+
+	USER   Especificação do nome do usuário.
+	       Qualquer valor é aceito e o retorno é 331 (senha requerida).
+	
+	PASS   Especificação da senha.
+	       Qualquer valor é aceito e o retorno é 230 (usuário logado).
+	
+	TYPE   Especificação do tipo de transmissão de arquivo.
+	       É permitida a mudança para qualquer tipo (retorno 200 OK), mas apenas
+	       utilizando-se o tipo I (image) é possível transferir arquivos.
+	
+	PASV   Passagem para o modo passivo.
+	       Apenas neste modo de conexão as transferências de arquivos podem ser
+	       realizadas.
+	       O retorno é 227 (entrando no modo passivo), a não ser que haja falha
+	       na abertura da conexão. Neste caso, o servidor é encerrado, e o client
+	       exibe a resposta padrão de conexão perdida (em geral, 421).
+	
+	PORT   Especificação de porta no modo ativo.
+	       Esse comando é sempre aceito com retorno 200 (OK), no entanto nenhuma
+	       transferência de arquivo pode ser realizada no modo ativo.
+	
+	RETR   Obter (baixar) arquivo.
+	       Este comando tem vários retornos possíveis:
+	       451 - Quando o tipo de transmissão é diferente de I (image).
+	       425 - Quando o modo de conexão é ativo.
+	       550 - Quando o arquivo não é encontrado.
+	       150 seguido de 226 - Quando a transmissão é efetuada com sucesso.
+	
+	STOR   Enviar arquivo.
+	       Bastante semelhante ao RETR, os retornos possíveis são:
+	       451 - Quando o tipo de transmissão é diferente de I (image).
+	       425 - Quando o modo de conexão é ativo.
+	       451 - Quando ocorre erro ao criar o arquivo no lado do servidor.
+	       150 seguido de 226 - Quando a transmissão é efetuada com sucesso.
+	
+	QUIT   Encerra a sessão.
+	       O retorno é 221 (servidor fechando conexão).
+
+Alguns dos retornos em caso de erro podem não estar usando o código mais
+apropriado, pois na verdade não há códigos definidos para situações como a não
+transmissão no modo ativo ou com tipo diferente de imagem, já que qualquer
+implementação válida de servidor FTP deveria suportar estas funcionalidades.
+
+2) Compilação e execução
+
+Para compilar o programa, basta abrir o diretório extraído (onde se encontra
+este LEIAME) num terminal e executar:
+
+	make
+
+O executável será gerado mesmo diretório. Para executar, utilize a linha de
+comando:
+
+	./ep1 PORTA
+
+Onde PORTA é o número da porta onde o servidor esperará conexões. Uma vez com o
+servidor em execução, pode-se usar o programa padrão Unix ftp para se conectar:
+
+	ftp SERVIDOR PORTA
+
+Onde SERVIDOR é o nome ou IP da máquina onde o servidor está em execução e PORTA
+é a mesma passada como parâmetro na execução de ep1.

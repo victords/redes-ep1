@@ -19,10 +19,12 @@ void command_user();
 void command_pass();
 void command_type();
 void command_pasv();
+void command_port();
 void command_retr();
 void command_stor();
 void command_quit();
 void command_not_implemented();
+char not_logged();
 
 typedef enum {
 	LISTENING,
