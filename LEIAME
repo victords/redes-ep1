@@ -53,6 +53,12 @@ Os comandos suportados são:
 	QUIT   Encerra a sessão.
 	       O retorno é 221 (servidor fechando conexão).
 
+Os comandos TYPE, PASV, PORT, RETR e STOR possuem também uma checagem para
+impedir que os comandos sejam executados sem que o usuário esteja logado, caso
+em que o retorno é 530 (usuário não logado). Porém, como qualquer nome de
+usuário e senha é aceito pelo programa, este retorno provavelmente nunca será
+utilizado.
+
 Alguns dos retornos em caso de erro podem não estar usando o código mais
 apropriado, pois na verdade não há códigos definidos para situações como a não
 transmissão no modo ativo ou com tipo diferente de imagem, já que qualquer
